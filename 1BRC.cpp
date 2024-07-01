@@ -4,12 +4,13 @@
 #include <string>
 #include <fstream>
 #include <iomanip>
+#include <unordered_map>
 //based off of https://github.com/gunnarmorling/1brc/tree/main
 
 struct station
 {
-    std::string name;
-    int sum; //sum of all measurement entries for that station
+    char identifier[10]; //the first ten characters ought to be enough to identify each unique station.
+    unsigned int sum; //sum of all measurement entries for that station
     int count; //how often that station appears in the data, used for calculating the mean
     int min; //minimum temp
     int max; //maximum temp
@@ -37,6 +38,30 @@ void printBytes(const std::string& input) {
     std::cout << std::endl;
 }
 
+char extractTemp(const char* inputText, int semicolonIndex) {
+    //extract the temperature by only looking at the very chars we actually need.
+    //We don't need bounds checking because the structure of each line is consistent all the time.
+    char output = 0;
+    //determine sign
+    if (inputText[semicolonIndex + 1] == 0x2D) { //0x2D == "-"
+        output |= (1 << 8); //toggle the sign bit to negative
+        output += inputText[semicolonIndex + 2] * 10;
+        output += inputText[semicolonIndex + 3] * 10;
+        output += inputText[semicolonIndex + 5] * 10;
+        //6 adds and 3 mults, times one billion at 4 GHZ is at least 2 seconds, assuming no parallelism or optimisations and single-cycle muliplications.
+        //Just for this code path...
+    }
+    else
+    {
+        //this branch runs if the temp is positive, i.e. the char after the semicolon is not "-"
+        //sign bit is already zero
+        output += inputText[semicolonIndex + 1] * 10;
+        output += inputText[semicolonIndex + 2] * 10;
+        output += inputText[semicolonIndex + 4] * 10;
+    }
+    return output;
+}
+
 int findSemicolon(const std::string& input) {
     //it works!
     //turn string into char array
@@ -44,7 +69,7 @@ int findSemicolon(const std::string& input) {
     std::strcpy(carray, input.c_str()); //I am in danger
 
     int i = 0;
-    while (carray[i] != 0x00) //iterate over each char
+    while (carray[i] != 0x00 && i < input.length() + 1) //iterate over each char
     {
         if (carray[i] == 0x3b) //check for semicolon
         {
@@ -57,7 +82,11 @@ int findSemicolon(const std::string& input) {
 int main()
 {
     auto meas = load_data(R"(C:\Users\lions\OneDrive\Bilder\1 Dokumente\C++\Billion row challenge\measurements.txt)");
-    for (std::string s : meas) {
+    std::unordered_map<char[10], station> stationRecord; //a record of all the stations to map into
+    //the meat and potatoes loop
+    for (const std::string s : meas) {
+        const int semi = findSemicolon(s);
+        char temp = extractTemp(s, semi);
         std::cout << s << ": " << findSemicolon(s) << std::endl;
     }
 
