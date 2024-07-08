@@ -14,10 +14,32 @@ struct station
     int count; //how often that station appears in the data, used for calculating the mean
     int min; //minimum temp
     int max; //maximum temp
-    int calculateMean() const {
-        return sum / count;
+};
+
+template<>
+struct std::hash<char[10]> {
+    //provide a custom hashing function for char[10]
+    //if the char[] is longer than 10 items this will cause a buffer overflow
+    std::size_t operator()(const char s[10]) const {
+        std::size_t hash = 0;
+        //combine hashes
+        for (int i = 0; i < 10; ++i) {
+            hash = hash * 31 + s[i];
+        }
+        return hash;
     }
 };
+
+//check if two char array are equal
+struct CharArrayEqual {
+    bool operator()(const char lhs[10], const char rhs[10]) const {
+        return std::strncmp(lhs, rhs, 10) == 0;
+    }
+};
+
+unsigned int calculateMean(const station& station) {
+    return station.sum/station.count;
+}
 
 std::vector<std::string> load_data(const std::string& path) {
     //loads the lines of a file into a vector of strings, one string per line
@@ -38,16 +60,18 @@ void printBytes(const std::string& input) {
     std::cout << std::endl;
 }
 
-char extractTemp(const char* inputText, int semicolonIndex) {
+char extractTemp(const std::string&  inputText, int semicolonIndex) {
     //extract the temperature by only looking at the very chars we actually need.
     //We don't need bounds checking because the structure of each line is consistent all the time.
+    char* text = new char[inputText.length() + 1];
+    std::strcpy(text, inputText.c_str()); //I am in danger
     char output = 0;
     //determine sign
     if (inputText[semicolonIndex + 1] == 0x2D) { //0x2D == "-"
         output |= (1 << 8); //toggle the sign bit to negative
-        output += inputText[semicolonIndex + 2] * 10;
-        output += inputText[semicolonIndex + 3] * 10;
-        output += inputText[semicolonIndex + 5] * 10;
+        output += text[semicolonIndex + 2] * 10;
+        output += text[semicolonIndex + 3] * 10;
+        output += text[semicolonIndex + 5] * 10;
         //6 adds and 3 mults, times one billion at 4 GHZ is at least 2 seconds, assuming no parallelism or optimisations and single-cycle muliplications.
         //Just for this code path...
     }
@@ -55,9 +79,9 @@ char extractTemp(const char* inputText, int semicolonIndex) {
     {
         //this branch runs if the temp is positive, i.e. the char after the semicolon is not "-"
         //sign bit is already zero
-        output += inputText[semicolonIndex + 1] * 10;
-        output += inputText[semicolonIndex + 2] * 10;
-        output += inputText[semicolonIndex + 4] * 10;
+        output += text[semicolonIndex + 1] * 10;
+        output += text[semicolonIndex + 2] * 10;
+        output += text[semicolonIndex + 4] * 10;
     }
     return output;
 }
@@ -77,6 +101,7 @@ int findSemicolon(const std::string& input) {
         }
         ++i;
     }
+    return -1; //should never be reachable
 }
 
 int main()
@@ -84,7 +109,7 @@ int main()
     auto meas = load_data(R"(C:\Users\lions\OneDrive\Bilder\1 Dokumente\C++\Billion row challenge\measurements.txt)");
     std::unordered_map<char[10], station> stationRecord; //a record of all the stations to map into
     //the meat and potatoes loop
-    for (const std::string s : meas) {
+    for (const std::string & s : meas) {
         const int semi = findSemicolon(s);
         char temp = extractTemp(s, semi);
         std::cout << s << ": " << findSemicolon(s) << std::endl;
