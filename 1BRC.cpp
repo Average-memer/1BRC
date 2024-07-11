@@ -49,7 +49,7 @@ std::vector<std::string> load_data(const std::string& path) {
     while (std::getline(file, placeholder)) {
         lines.emplace_back(placeholder);
     }
-    return lines;
+     return lines;
 }
 
 void printBytes(const std::string& input) {
@@ -58,20 +58,22 @@ void printBytes(const std::string& input) {
         std::cout << "0x" << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(c) << " ";
     }
     std::cout << std::endl;
+
 }
 
-char extractTemp(const std::string&  inputText, int semicolonIndex) {
+int16_t extractTemp(const std::string&  inputText, int semicolonIndex) {
     //extract the temperature by only looking at the very chars we actually need.
     //We don't need bounds checking because the structure of each line is consistent all the time.
+    //TODO: find out performance implications of strcpy and ways of avoiding it.
     char* text = new char[inputText.length() + 1];
     std::strcpy(text, inputText.c_str()); //I am in danger
-    char output = 0;
+    int16_t output = 0;
     //determine sign
     if (inputText[semicolonIndex + 1] == 0x2D) { //0x2D == "-"
-        output |= (1 << 8); //toggle the sign bit to negative
-        output += text[semicolonIndex + 2] * 10;
-        output += text[semicolonIndex + 3] * 10;
-        output += text[semicolonIndex + 5] * 10;
+        output += (text[semicolonIndex + 2] - 48) * 100;
+        output += (text[semicolonIndex + 3] - 48) * 10;
+        output += text[semicolonIndex + 5] - 48;
+        output *= -1; //set sign to negative
         //6 adds and 3 mults, times one billion at 4 GHZ is at least 2 seconds, assuming no parallelism or optimisations and single-cycle muliplications.
         //Just for this code path...
     }
@@ -79,9 +81,9 @@ char extractTemp(const std::string&  inputText, int semicolonIndex) {
     {
         //this branch runs if the temp is positive, i.e. the char after the semicolon is not "-"
         //sign bit is already zero
-        output += text[semicolonIndex + 1] * 10;
-        output += text[semicolonIndex + 2] * 10;
-        output += text[semicolonIndex + 4] * 10;
+        output += (text[semicolonIndex + 2] - 48) * 100;
+        output += (text[semicolonIndex + 3] - 48) * 10;
+        output += text[semicolonIndex + 5] - 48;
     }
     return output;
 }
@@ -106,13 +108,13 @@ int findSemicolon(const std::string& input) {
 
 int main()
 {
-    auto meas = load_data(R"(C:\Users\lions\OneDrive\Bilder\1 Dokumente\C++\Billion row challenge\measurements.txt)");
+    const std::vector<std::string> meas = load_data(R"(/Users/lionsteinheiser/Library/CloudStorage/OneDrive-Persönlich/Bilder/1 Dokumente/C++/Billion row challenge/measurements.txt)");
     std::unordered_map<char[10], station> stationRecord; //a record of all the stations to map into
     //the meat and potatoes loop
     for (const std::string & s : meas) {
         const int semi = findSemicolon(s);
         char temp = extractTemp(s, semi);
-        std::cout << s << ": " << findSemicolon(s) << std::endl;
+        std::cout << s << "Temperature: " << temp << std::endl;
     }
 
 	return 0;
